@@ -237,6 +237,8 @@ class HtmlText extends Text {
 	}
 
 	override function initGlyphs( text : String, rebuild = true ) {
+		if (StringTools.startsWith(text, "The stellar"))
+			trace("helle");
 		if( rebuild ) {
 			glyphs.clear();
 			for( e in elements ) e.remove();
@@ -513,7 +515,7 @@ class HtmlText extends Text {
 	inline function nextLine( align : Align, size : Float )
 	{
 		switch( align ) {
-			case Left:
+			case Left, Justify:
 				xPos = 0;
 				if (xMin > 0) xMin = 0;
 			case Right, Center, MultilineCenter, MultilineRight:
@@ -631,8 +633,7 @@ class HtmlText extends Text {
 			}
 		}
 
-		inline function makeLineBreak()
-		{
+		inline function makeLineBreak() {
 			finalizeInteractive();
 			if( xPos > xMax ) xMax = xPos;
 			yPos += metrics[sizePos].height + lineSpacing;
@@ -699,7 +700,8 @@ class HtmlText extends Text {
 								align = MultilineCenter;
 							case "multiline-right":
 								align = MultilineRight;
-							//?justify
+							case "justify":
+								align = Justify;
 							}
 						default:
 					}

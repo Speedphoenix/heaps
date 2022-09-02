@@ -50,6 +50,10 @@ enum Align {
 		See Text sample for showcase.
 	**/
 	MultilineCenter;
+	/**
+		// TODO TOMORROW
+	**/
+	Justify;
 }
 
 /**
@@ -301,7 +305,7 @@ class Text extends Drawable {
 		Perform a word-wrap of the `text` based on this Text settings.
 	**/
 	public function splitText( text : String ) {
-		return splitRawText(text,0,0);
+		return splitRawText(text,0,0).join("\n");
 	}
 
 	/**
@@ -319,7 +323,7 @@ class Text extends Drawable {
 		var maxWidth = realMaxWidth;
 		if( maxWidth < 0 ) {
 			if ( sizes == null )
-				return text;
+				return [text];
 			else
 				maxWidth = Math.POSITIVE_INFINITY;
 		}
@@ -383,7 +387,7 @@ class Text extends Drawable {
 			lines.push(text.substr(restPos, text.length - restPos));
 			if ( sizes != null ) sizes.push(x);
 		}
-		return lines.join("\n");
+		return lines; //.join("\n");
 	}
 
 	/**
@@ -399,11 +403,12 @@ class Text extends Drawable {
 		if( rebuild ) glyphs.clear();
 		var x = 0., y = 0., xMax = 0., xMin = 0., yMin = 0., prevChar = -1, linei = 0;
 		var align = textAlign;
-		var lines = new Array<Float>();
+		var lineWidths = new Array<Float>();
 		var dl = font.lineHeight + lineSpacing;
-		var t = splitRawText(text, 0, 0, lines);
+		var lines = splitRawText(text, 0, 0, lineWidths);
+		final breakingSpace = ' '.code;
 
-		for ( lw in lines ) {
+		for ( lw in lineWidths ) {
 			if ( lw > x ) x = lw;
 		}
 		calcWidth = x;
@@ -412,39 +417,77 @@ class Text extends Drawable {
 		case Center, Right, MultilineCenter, MultilineRight:
 			var max = if( align == MultilineCenter || align == MultilineRight ) hxd.Math.ceil(calcWidth) else realMaxWidth < 0 ? 0 : hxd.Math.ceil(realMaxWidth);
 			var k = align == Center || align == MultilineCenter ? 0.5 : 1;
-			for( i in 0...lines.length )
-				lines[i] = Math.ffloor((max - lines[i]) * k);
-			x = lines[0];
+			for( i in 0...lineWidths.length )
+				lineWidths[i] = Math.ffloor((max - lineWidths[i]) * k);
+			x = lineWidths[0];
 			xMin = x;
-		case Left:
+		case Left, Justify:
 			x = 0;
 		}
 
-		for( i in 0...t.length ) {
-			var cc = t.charCodeAt(i);
-			var e = font.getChar(cc);
-			var offs = e.getKerningOffset(prevChar);
-			var esize = e.width + offs;
-			// if the next word goes past the max width, change it into a newline
+		function countSpaces(t: String) {
+			var count = 0;
+			for( i in 0...t.length ) {
+				if (t.charCodeAt(i) == breakingSpace)
+					count++;
+				if (t.charCodeAt(i) == '\n'.code)
+					break;
+			}
+			return count;
+		}
 
-			if( cc == '\n'.code ) {
-				if( x > xMax ) xMax = x;
-				switch( align ) {
-				case Left:
-					x = 0;
-				case Right, Center, MultilineCenter, MultilineRight:
-					x = lines[++linei];
-					if( x < xMin ) xMin = x;
+		var se = font.getChar(breakingSpace);
+		var soffs = se.getKerningOffset(prevChar);
+		var baseSpaceWidth = se.width + soffs + letterSpacing;
+
+		var spaces = 0;
+		var spaceWidth = 0.;
+		// TODO check for negative width and the like
+		if (lines.length > 0) {
+			countSpaces(lines[0]);
+			if (spaces > 0)
+				spaceWidth = (maxWidth - lineWidths[linei] + spaces * baseSpaceWidth) / spaces;
+		}
+
+		for( t in lines ) {
+			for( i in 0...t.length ) {
+				var cc = t.charCodeAt(i);
+				var e = font.getChar(cc);
+				var offs = e.getKerningOffset(prevChar);
+				var esize = e.width + offs;
+				// if the next word goes past the max width, change it into a newline
+				if( cc != '\n'.code ) {
+					if( e != null ) {
+						if( rebuild ) glyphs.add(x + offs, y, e.t);
+						if( y == 0 && e.t.dy < yMin ) yMin = e.t.dy;
+						if( cc == breakingSpace && align == Justify )
+							x += spaceWidth;
+						else
+							x += esize + letterSpacing;
+					}
+					prevChar = cc;
 				}
-				y += dl;
-				prevChar = -1;
-			} else {
-				if( e != null ) {
-					if( rebuild ) glyphs.add(x + offs, y, e.t);
-					if( y == 0 && e.t.dy < yMin ) yMin = e.t.dy;
-					x += esize + letterSpacing;
+				if( cc == '\n'.code || i == t.length -1 ) {
+					if( x > xMax ) xMax = x;
+					switch( align ) {
+					case Left:
+						x = 0;
+					case Justify:
+						x = 0;
+						linei++;
+
+						spaces = countSpaces(t);
+						spaceWidth = 0.;
+						// TODO check for negative width and the like
+						if (spaces > 0)
+							spaceWidth = ((maxWidth) - lineWidths[linei] + spaces * baseSpaceWidth) / spaces;
+					case Right, Center, MultilineCenter, MultilineRight:
+						x = lineWidths[++linei];
+						if( x < xMin ) xMin = x;
+					}
+					y += dl;
+					prevChar = -1;
 				}
-				prevChar = cc;
 			}
 		}
 		if( x > xMax ) xMax = x;
